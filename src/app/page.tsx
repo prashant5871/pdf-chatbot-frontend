@@ -33,7 +33,7 @@ export default function Home() {
 
   // Generate session ID on first load
   useEffect(() => {
-    let storedSessionId = localStorage.getItem('pdf-chat-session-id')
+    let storedSessionId = null
     if (!storedSessionId) {
       storedSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       localStorage.setItem('pdf-chat-session-id', storedSessionId)
@@ -41,7 +41,7 @@ export default function Home() {
     setSessionId(storedSessionId)
 
     // Load stored data
-    const storedPdfs = localStorage.getItem('uploaded-pdfs')
+    const storedPdfs = null
     if (storedPdfs) {
       setUploadedPdfs(JSON.parse(storedPdfs).map((pdf: any) => ({
         ...pdf,
@@ -49,7 +49,7 @@ export default function Home() {
       })))
     }
 
-    const storedMessages = localStorage.getItem('chat-messages')
+    const storedMessages = null
     if (storedMessages) {
       setChatMessages(JSON.parse(storedMessages).map((msg: any) => ({
         ...msg,

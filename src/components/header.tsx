@@ -69,6 +69,7 @@ export function Header({
               onClick={onOpenPromptSettings}
               className={hasCustomPrompt ? 'border-primary' : ''}
             >
+              <span className='pr-1 hidden sm:inline'>Customize your prompt </span> 
               <Settings className="w-4 h-4" />
             </Button>
 
