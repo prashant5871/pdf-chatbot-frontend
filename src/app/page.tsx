@@ -96,6 +96,54 @@ export default function Home() {
     }
   }
 
+  const onRefresh = () => {
+    localStorage.removeItem('pdf-chat-session-id');
+    localStorage.removeItem('uploaded-pdfs');
+    localStorage.removeItem('chat-messages');
+    localStorage.removeItem('custom-prompt');
+    localStorage.removeItem('selected-model');
+
+
+    window.location.reload();
+  }
+
+
+  const handleClearHistory = async () => {
+
+    const userId = localStorage.getItem('pdf-chat-session-id')
+
+    console.log("User id : ", userId);
+
+
+    if (!userId) {
+      console.error('No user_id found in localStorage')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('user_id', userId)
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/clear-chat-history`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+
+      setChatMessages([]);
+
+      console.log('Chat history cleared:', result)
+    } catch (error) {
+      console.error('Failed to clear chat history:', error)
+    }
+
+  }
+
   const handleSendMessage = async (message: string) => {
     const userMessage: ChatMessage = {
       id: `msg_${Date.now()}_user`,
@@ -106,30 +154,30 @@ export default function Home() {
     setChatMessages(prev => [...prev, userMessage])
 
     try {
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000'
-      const requestBody: any = {
-        user_id: sessionId,
-        query: message,
-        model: selectedModel
-      }
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+
+      const formData = new FormData();
+      formData.append('user_id', sessionId.toString());
+      formData.append('query', message);
+      formData.append('model', selectedModel);
 
       if (customPrompt) {
-        requestBody.prompt = customPrompt
+        formData.append('prompt', customPrompt);
       }
 
       const response = await fetch(`${apiBaseUrl}/ask`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      })
+        body: formData, // No need to set Content-Type
+      });
+
 
       if (!response.ok) {
         throw new Error('Failed to get response')
       }
 
       const result = await response.json()
+
+
 
       const botMessage: ChatMessage = {
         id: `msg_${Date.now()}_bot`,
@@ -160,6 +208,8 @@ export default function Home() {
         selectedModel={selectedModel}
         onModelChange={setSelectedModel}
         hasCustomPrompt={!!customPrompt}
+        onRefresh={onRefresh}
+        onClearMessage={handleClearHistory}
       />
 
       <main className="container mx-auto px-4 py-6">

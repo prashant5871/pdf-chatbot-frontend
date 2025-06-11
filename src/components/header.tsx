@@ -1,6 +1,6 @@
 'use client'
 
-import { Moon, Sun, Settings, Bot } from 'lucide-react'
+import { Moon, Sun, Settings, Bot, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,19 +9,26 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ChevronDown } from 'lucide-react'
+
 
 interface HeaderProps {
   onOpenPromptSettings: () => void
   selectedModel: 'Sonnet' | 'Haiku' | 'Opus'
   onModelChange: (model: 'Sonnet' | 'Haiku' | 'Opus') => void
-  hasCustomPrompt: boolean
+  hasCustomPrompt: boolean,
+  onClearMessage: () => void,
+  onRefresh: () => void
+
 }
 
-export function Header({ 
-  onOpenPromptSettings, 
-  selectedModel, 
-  onModelChange, 
-  hasCustomPrompt 
+export function Header({
+  onOpenPromptSettings,
+  selectedModel,
+  onModelChange,
+  hasCustomPrompt,
+  onClearMessage,
+  onRefresh
 }: HeaderProps) {
   const { setTheme, theme } = useTheme()
 
@@ -43,22 +50,20 @@ export function Header({
 
           <div className="flex items-center space-x-2">
             {/* Model Selector */}
+            <Button variant="outline" size="sm" onClick={() => onRefresh()}>
+              {"Refresh"}
+            </Button>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
-                  {selectedModel}
+                  {selectedModel} <ChevronDown className="ml-1 h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onModelChange('Sonnet')}>
-                  Sonnet
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onModelChange('Haiku')}>
-                  Haiku
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onModelChange('Opus')}>
-                  Opus
-                </DropdownMenuItem>
+              <DropdownMenuContent align="end" className="z-50 w-40">
+                <DropdownMenuItem onClick={() => onModelChange('Sonnet')}>Sonnet</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onModelChange('Haiku')}>Haiku</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onModelChange('Opus')}>Opus</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -69,8 +74,18 @@ export function Header({
               onClick={onOpenPromptSettings}
               className={hasCustomPrompt ? 'border-primary' : ''}
             >
-              <span className='pr-1 hidden sm:inline'>Customize your prompt </span> 
+              <span className='pr-1 hidden sm:inline'>Customize your prompt </span>
               <Settings className="w-4 h-4" />
+            </Button>
+
+            {/* Clear Chat Button */}
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={onClearMessage}
+            >
+              <span className="pr-1 hidden sm:inline">Clear Chat</span>
+              <X className="w-4 h-4" />
             </Button>
 
             {/* Theme Toggle */}

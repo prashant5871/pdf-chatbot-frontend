@@ -16,7 +16,7 @@ export function PdfUpload({ onUpload, sessionId, isCompact = false }: PdfUploadP
   const [isDragOver, setIsDragOver] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
-  const [error, setError] = useState<string>('')
+  const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' | 'info' } | null>(null)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -28,51 +28,88 @@ export function PdfUpload({ onUpload, sessionId, isCompact = false }: PdfUploadP
     setIsDragOver(false)
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-    
-    const files = Array.from(e.dataTransfer.files).filter(
-      file => file.type === 'application/pdf'
-    )
-    
-    if (files.length === 0) {
-      setError('Please select only PDF files')
-      return
-    }
-    
-    setSelectedFiles(prev => [...prev, ...files])
-    setError('')
-  }, [])
+  // Helper function for client-side duplicate check (before upload)
+  const isFileDuplicateClientSide = useCallback(
+    (file: File) => {
+      return selectedFiles.some(
+        existingFile => existingFile.name === file.name && existingFile.size === file.size
+      )
+    },
+    [selectedFiles]
+  )
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter(
-      file => file.type === 'application/pdf'
-    )
-    
-    if (files.length === 0) {
-      setError('Please select only PDF files')
-      return
-    }
-    
-    setSelectedFiles(prev => [...prev, ...files])
-    setError('')
-  }, [])
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragOver(false)
+      setMessage(null)
+
+      const droppedFiles = Array.from(e.dataTransfer.files).filter(
+        file => file.type === 'application/pdf'
+      )
+
+      if (droppedFiles.length === 0) {
+        setMessage({ text: 'Please select only PDF files.', type: 'error' })
+        return
+      }
+
+      const newUniqueFiles = droppedFiles.filter(file => !isFileDuplicateClientSide(file))
+
+      if (newUniqueFiles.length === 0 && droppedFiles.length > 0) {
+        setMessage({ text: 'All selected PDF files are already in the list for upload.', type: 'info' })
+        return
+      }
+
+      setSelectedFiles(prev => [...prev, ...newUniqueFiles])
+      setMessage(null)
+    },
+    [isFileDuplicateClientSide]
+  )
+
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setMessage(null)
+
+      const selectedInputFiles = Array.from(e.target.files || []).filter(
+        file => file.type === 'application/pdf'
+      )
+
+      if (selectedInputFiles.length === 0) {
+        setMessage({ text: 'Please select only PDF files.', type: 'error' })
+        e.target.value = '';
+        return
+      }
+
+      const newUniqueFiles = selectedInputFiles.filter(file => !isFileDuplicateClientSide(file))
+
+      if (newUniqueFiles.length === 0 && selectedInputFiles.length > 0) {
+        setMessage({ text: 'All selected PDF files are already in the list for upload.', type: 'info' })
+        e.target.value = '';
+        return
+      }
+
+      setSelectedFiles(prev => [...prev, ...newUniqueFiles])
+      setMessage(null)
+      e.target.value = '';
+    },
+    [isFileDuplicateClientSide]
+  )
 
   const removeFile = (index: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+    setMessage(null)
   }
 
   const handleUpload = async () => {
     if (selectedFiles.length === 0) return
 
     setIsUploading(true)
-    setError('')
+    setMessage(null)
 
     try {
       const formData = new FormData()
       formData.append('user_id', sessionId)
-      
+
       selectedFiles.forEach(file => {
         formData.append('files', file)
       })
@@ -83,30 +120,89 @@ export function PdfUpload({ onUpload, sessionId, isCompact = false }: PdfUploadP
         body: formData,
       })
 
-      // if (!response.ok) {
-      //   throw new Error('Upload failed')
-      // }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(`Upload failed: ${errorData.message || response.statusText}`);
+      }
 
-      // const result = await response.json()
-      
-      // Create uploaded PDF objects
-      const uploadedPdfs: UploadedPdf[] = selectedFiles.map(file => ({
-        id: `pdf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: file.name,
-        size: file.size,
-        uploadDate: new Date()
-      }))
+      // Parse the response, which now includes 'results' with 'status'
+      const result = await response.json()
+      const serverUploadResults = result.results || [];
 
-      onUpload(uploadedPdfs)
-      setSelectedFiles([])
-      
+      const successfulUploads: UploadedPdf[] = [];
+      const duplicateFiles: string[] = [];
+      const failedFiles: string[] = [];
+
+      selectedFiles.forEach(localFile => {
+        const serverResult = serverUploadResults.find(
+          (sr: any) => sr.filename === localFile.name
+        );
+
+        if (serverResult) {
+          if (serverResult.status === 'ok') {
+            successfulUploads.push({
+              id: serverResult.pdf_id, // Use PDF ID from server
+              name: localFile.name,
+              size: localFile.size,
+              uploadDate: new Date()
+            });
+          } else if (serverResult.status === 'duplicate') {
+            duplicateFiles.push(localFile.name);
+          } else {
+            failedFiles.push(localFile.name); // Handle other potential failure statuses
+          }
+        } else {
+          failedFiles.push(localFile.name); // File sent but no result from server
+        }
+      });
+
+      let statusMessage = '';
+      let messageType: 'success' | 'error' | 'info' = 'success';
+
+      if (successfulUploads.length > 0) {
+        statusMessage += `${successfulUploads.length} PDF(s) uploaded successfully! `;
+      }
+      if (duplicateFiles.length > 0) {
+        statusMessage += `${duplicateFiles.length} PDF(s) were already uploaded: ${duplicateFiles.join(', ')}. `;
+        messageType = successfulUploads.length > 0 ? 'info' : 'info'; // If some are successful, it's still info/partial success
+      }
+      if (failedFiles.length > 0) {
+        statusMessage += `${failedFiles.length} PDF(s) failed to upload: ${failedFiles.join(', ')}. `;
+        messageType = 'error'; // If any fail, the overall status is an error
+      }
+
+      if (statusMessage) {
+         setMessage({ text: statusMessage.trim(), type: messageType });
+      } else {
+         // Fallback if no specific messages were generated (shouldn't happen often)
+         setMessage({ text: 'Upload process completed with no specific status.', type: 'info' });
+      }
+
+
+      // Only clear selected files and call onUpload for *successfully uploaded* ones
+      onUpload(successfulUploads);
+      setSelectedFiles(prev => prev.filter(file => !successfulUploads.some(uploaded => uploaded.name === file.name)));
+
+
     } catch (err) {
-      setError('Failed to upload PDFs. Please try again.')
+      setMessage({
+        text: `Failed to upload PDFs. ${err instanceof Error ? err.message : String(err)}. Please try again.`,
+        type: 'error',
+      })
       console.error('Upload error:', err)
     } finally {
       setIsUploading(false)
     }
   }
+
+  // Determine message styles based on type
+  const messageClasses = message
+    ? {
+        error: 'text-sm text-destructive mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg',
+        success: 'text-sm text-green-700 mt-2 p-3 bg-green-100 border border-green-200 rounded-lg',
+        info: 'text-sm text-blue-700 mt-2 p-3 bg-blue-100 border border-blue-200 rounded-lg',
+      }[message.type]
+    : '';
 
   if (isCompact) {
     return (
@@ -140,7 +236,7 @@ export function PdfUpload({ onUpload, sessionId, isCompact = false }: PdfUploadP
               </Button>
             )}
           </div>
-          
+
           {selectedFiles.length > 0 && (
             <div className="mt-3 space-y-2">
               {selectedFiles.map((file, index) => (
@@ -160,9 +256,9 @@ export function PdfUpload({ onUpload, sessionId, isCompact = false }: PdfUploadP
               ))}
             </div>
           )}
-          
-          {error && (
-            <p className="text-sm text-destructive mt-2">{error}</p>
+
+          {message && (
+            <p className={messageClasses}>{message.text}</p>
           )}
         </CardContent>
       </Card>
@@ -238,9 +334,9 @@ export function PdfUpload({ onUpload, sessionId, isCompact = false }: PdfUploadP
           </div>
         )}
 
-        {error && (
-          <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <p className="text-sm text-destructive">{error}</p>
+        {message && (
+          <div className={messageClasses}>
+            <p>{message.text}</p>
           </div>
         )}
 
