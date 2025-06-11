@@ -96,15 +96,48 @@ export default function Home() {
     }
   }
 
-  const onRefresh = () => {
-    localStorage.removeItem('pdf-chat-session-id');
-    localStorage.removeItem('uploaded-pdfs');
-    localStorage.removeItem('chat-messages');
-    localStorage.removeItem('custom-prompt');
-    localStorage.removeItem('selected-model');
+  const onRefresh = async () => {
+
+    const userId = localStorage.getItem('pdf-chat-session-id')
+
+    console.log("User id : ", userId);
 
 
-    window.location.reload();
+    if (!userId) {
+      console.error('No user_id found in localStorage')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('user_id', userId)
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/delete-user-id`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+
+
+      console.log('User Id cleared:', result)
+
+      localStorage.removeItem('pdf-chat-session-id');
+      localStorage.removeItem('uploaded-pdfs');
+      localStorage.removeItem('chat-messages');
+      localStorage.removeItem('custom-prompt');
+      localStorage.removeItem('selected-model');
+
+
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to clear chat history:', error)
+    }
+
   }
 
 
